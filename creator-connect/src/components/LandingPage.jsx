@@ -12,8 +12,8 @@ const FeatureCard = ({ Icon, title, description }) => (
   </div>
 );
 
-// New Pricing Card Component based on your Screenshot
-const PricingTier = ({ title, price, features, isDark }) => (
+// Pricing Card Component (Updated to accept onAction)
+const PricingTier = ({ title, price, features, isDark, onAction }) => (
   <div className={`card ${isDark ? 'card-dark' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden' }}>
     {isDark && <div style={{ position: 'absolute', top: 0, right: 0, background: 'var(--primary)', color: 'black', fontSize: '0.7rem', fontWeight: 800, padding: '4px 12px', borderBottomLeftRadius: '8px' }}>RECOMMENDED</div>}
     
@@ -34,7 +34,11 @@ const PricingTier = ({ title, price, features, isDark }) => (
         ))}
     </div>
     
-    <button className="btn btn-primary" style={{ marginTop: '32px', width: '100%', padding: '1rem' }}>
+    <button 
+      onClick={onAction} 
+      className="btn btn-primary" 
+      style={{ marginTop: '32px', width: '100%', padding: '1rem' }}
+    >
       Get Started <ArrowRight size={18} style={{marginLeft: 8}}/>
     </button>
   </div>
@@ -71,7 +75,7 @@ export default function LandingPage({ setView }) {
       {/* HERO */}
       <section className="hero">
         <div className="kicker"><TrendingUp size={16} /> The Professional Network for Creators</div>
-        <h1 className="hero-title">Trust is the new<br/><span className="gradient-text">Currency.</span></h1>
+        <h1 className="hero-title">Credible<br/><span className="gradient-text"></span></h1>
         <p className="hero-sub">
           A trusted hub for creators and brands to connect, verify, and grow their careers—<strong>without posting content</strong>.
         </p>
@@ -122,7 +126,7 @@ export default function LandingPage({ setView }) {
         </div>
       </section>
 
-      {/* NEW: PREMIUM TIER BREAKDOWN (From Screenshot) */}
+      {/* PREMIUM TIER BREAKDOWN */}
       <section id="pricing" style={{marginTop: 80}}>
         <div className="section-divider"><DollarSign size={40} color="var(--primary)" strokeWidth={3} /></div>
         <div style={{textAlign:'center', marginBottom: 60}}>
@@ -131,19 +135,21 @@ export default function LandingPage({ setView }) {
         </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '32px' }}>
-          {/* Plan 1: Pro Creator */}
+          {/* Plan 1: Pro Creator - Redirects to Signup Choice */}
           <PricingTier 
             title="Pro Creator" 
             price="₹499" 
             features={proCreatorFeatures} 
+            onAction={() => setView('signup-choice')}
           />
           
-          {/* Plan 2: Brand Dashboard */}
+          {/* Plan 2: Brand Dashboard - Redirects to Signup Choice */}
           <PricingTier 
             title="Brand Dashboard" 
             price="₹4,999" 
             features={brandFeatures}
             isDark={true}
+            onAction={() => setView('signup-choice')}
           />
         </div>
       </section>
@@ -151,9 +157,6 @@ export default function LandingPage({ setView }) {
     </div>
   );
 }
-
-
-
 
 
 

@@ -1,43 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { updatePassword } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { doc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
 import { 
   Trophy, Briefcase, Award, Lock, X, Loader2, CheckCircle, Clock, Fingerprint,
   Send, Image as ImageIcon, ThumbsUp, MessageCircle, Share2, MoreHorizontal,
-  Globe, LayoutTemplate, Plus, Trash2
+  Globe, LayoutTemplate, Plus, Trash2, Crown, UserPlus, Download, Building2
 } from 'lucide-react';
 import VerificationTool from './VerificationTool';
 
-export default function Dashboard({ userData, setView, feedPosts, addPost }) {
+export default function Dashboard({ userData, setView, feedPosts, addPost, handleLike, handleComment, isPremium, onUpgrade, jobs }) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [showPortfolioModal, setShowPortfolioModal] = useState(false); // New Modal for Portfolio
+  const [showPlansModal, setShowPlansModal] = useState(false);
+  const [showPortfolioModal, setShowPortfolioModal] = useState(false);
   
-  // --- PORTFOLIO STATE ---
-  const [portfolio, setPortfolio] = useState([
+  // --- NEW: JOB APPLICATION & BRAND VIEW STATE ---
+  const [selectedJob, setSelectedJob] = useState(null); 
+  const [viewingBrand, setViewingBrand] = useState(null); 
+  const [appMessage, setAppMessage] = useState("");
+
+  // --- PORTFOLIO STATE (Initialize from userData if available) ---
+  const [portfolio, setPortfolio] = useState(userData.portfolio || [
     { id: 1, brand: "TechFlow", role: "Lead Reviewer", date: "Aug 2024", campaign: "Summer Gadgets" },
     { id: 2, brand: "SoundCore", role: "Influencer", date: "Jun 2024", campaign: "Audio Launch" },
   ]);
-  
-  // New Portfolio Item State
   const [newCollab, setNewCollab] = useState({ brand: "", role: "", date: "" });
 
-  // Add Item
-  const handleAddPortfolio = (e) => {
+  // SAVE TO FIREBASE HELPER
+  const savePortfolioToDb = async (newPortfolio) => {
+    if (auth.currentUser) {
+      try {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        await updateDoc(userRef, { portfolio: newPortfolio });
+      } catch (error) {
+        console.error("Error saving portfolio:", error);
+      }
+    }
+  };
+
+  const handleAddPortfolio = async (e) => {
     e.preventDefault();
     if (!newCollab.brand || !newCollab.role) return;
-    setPortfolio([{ id: Date.now(), ...newCollab, campaign: "Custom Project" }, ...portfolio]);
+    
+    const newItem = { id: Date.now(), ...newCollab, campaign: "Custom Project" };
+    const updatedPortfolio = [newItem, ...portfolio];
+    
+    setPortfolio(updatedPortfolio); // Update UI immediately
+    await savePortfolioToDb(updatedPortfolio); // Sync to DB
+    
     setNewCollab({ brand: "", role: "", date: "" });
     setShowPortfolioModal(false);
   };
 
-  // Delete Item
-  const handleDeletePortfolio = (id) => {
-    setPortfolio(portfolio.filter(p => p.id !== id));
+  const handleDeletePortfolio = async (id) => {
+    const updatedPortfolio = portfolio.filter(p => p.id !== id);
+    setPortfolio(updatedPortfolio); // Update UI immediately
+    await savePortfolioToDb(updatedPortfolio); // Sync to DB
+  };
+
+  const downloadPortfolio = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(portfolio, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "my_portfolio_credible.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
   };
 
   // --- FEED STATE ---
   const [postContent, setPostContent] = useState("");
+  const [commentInputs, setCommentInputs] = useState({}); 
 
   const handlePostSubmit = () => {
     if (!postContent.trim()) return;
@@ -47,10 +81,23 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
       avatar: (userData.fullName || "U")[0],
       content: postContent,
       time: "Just now",
-      likes: 0, comments: 0
+      likes: 0, comments: 0, likedByMe: false
     };
-    addPost(newPost); // Use the function passed from App.jsx
+    addPost(newPost);
     setPostContent("");
+  };
+
+  const submitComment = (postId) => {
+    if (!commentInputs[postId]) return;
+    handleComment(postId); 
+    setCommentInputs(prev => ({ ...prev, [postId]: "" })); 
+  };
+
+  const handleApply = (e) => {
+    e.preventDefault();
+    alert(`Application sent to ${selectedJob.brand} for "${selectedJob.title}"!`);
+    setSelectedJob(null);
+    setAppMessage("");
   };
 
   // --- PASSWORD STATE ---
@@ -61,10 +108,11 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setChangingPass(true);
-    // ... existing password logic ...
-    // (Keeping it brief for the file block, assume logic is same)
     setTimeout(() => { setChangingPass(false); setShowPasswordModal(false); }, 1000);
   };
+
+  const proCreatorFeatures = ["Live Analytics Dashboard", "Brand Discovery Priority", "AI Premium Templates", "Performance Insights"];
+  const brandFeatures = ["Unlimited Searches", "Verified Data Export", "Campaign Tracking", "AI Trust Scoring"];
 
   if (!userData) return null;
 
@@ -78,50 +126,70 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
           <h3 style={{ fontWeight: 'bold', fontSize: '1.4rem', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
             {userData.type === 'creator' ? userData.fullName : userData.companyName}
             {userData.verified && <CheckCircle size={22} fill="#10b981" color="white" />}
+            {isPremium && <Crown size={22} fill="#f59e0b" color="#b45309" />} 
           </h3>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>{userData.type} Account</p>
           <div className="stats-row"><div className="stat-box"><div className="stat-val">1.2k</div><div className="stat-lbl">Rank</div></div><div className="stat-box"><div className="stat-val">89</div><div className="stat-lbl">Trust Score</div></div></div>
         </div>
 
-        {/* PORTFOLIO SECTION (Interactive) */}
+        {/* PORTFOLIO */}
         <div className="card">
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
             <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Portfolio</h4>
-            <button onClick={() => setShowPortfolioModal(true)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Plus size={14}/> Add</button>
+            <div style={{display:'flex', gap:8}}>
+              <button onClick={downloadPortfolio} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }} title="Download Portfolio"><Download size={14}/></button>
+              <button onClick={() => setShowPortfolioModal(true)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Plus size={14}/> Add</button>
+            </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {portfolio.length === 0 && <p style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>No projects yet.</p>}
             {portfolio.map((collab) => (
               <div key={collab.id} style={{ display: 'flex', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
-                <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-hover)' }}>
-                  {collab.brand[0]}
-                </div>
+                <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-hover)' }}>{collab.brand ? collab.brand[0] : 'P'}</div>
                 <div style={{flex: 1}}>
                   <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{collab.brand}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{collab.role} • {collab.campaign}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{collab.date}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{collab.role}</div>
                 </div>
-                <button onClick={() => handleDeletePortfolio(collab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6 }}>
-                  <Trash2 size={16} />
-                </button>
+                <button onClick={() => handleDeletePortfolio(collab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6 }}><Trash2 size={16} /></button>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Actions */}
+        {/* ACTIONS */}
         <div className="card">
           <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px' }}>Actions</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <button onClick={() => setView('trending')} className="btn w-full" style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fcd34d' }}><Globe size={18} /> Global Trending Rank</button>
-            <button onClick={() => setView('templates')} className="btn w-full" style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}><LayoutTemplate size={18} /> Browse Templates</button>
+            <button 
+              onClick={() => isPremium ? setView('templates') : setShowPlansModal(true)} 
+              className="btn w-full" 
+              style={{ background: isPremium ? '#f0f9ff' : '#f1f5f9', color: isPremium ? '#0369a1' : '#64748b', border: isPremium ? '1px solid #bae6fd' : '1px solid #e2e8f0' }}
+            >
+              {isPremium ? <LayoutTemplate size={18} /> : <Lock size={18} />} 
+              {isPremium ? 'Browse Templates' : 'Templates (Locked)'}
+            </button>
             <button onClick={() => setShowVerifyModal(true)} className="btn w-full" style={{ background: 'var(--dark)', color: 'white' }}><Fingerprint size={18} /> Verify Identity</button>
           </div>
         </div>
+
+        {/* PREMIUM AD */}
+        {!isPremium ? (
+          <div className="card" style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 800, marginBottom: '8px' }}><Award size={20} /> Premium Plan</div>
+            <p style={{ fontSize: '0.9rem', color: '#92400e', lineHeight: 1.4, marginBottom: '16px' }}>Unlock detailed analytics, templates, and direct messaging.</p>
+            <button onClick={() => setShowPlansModal(true)} className="btn btn-primary" style={{ width: '100%', padding: '0.6rem' }}>Upgrade Plan</button>
+          </div>
+        ) : (
+          <div className="card" style={{ background: '#ecfdf5', border: '1px solid #6ee7b7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#047857', fontWeight: 800, marginBottom: '8px' }}><Crown size={20} /> Premium Active</div>
+            <p style={{ fontSize: '0.9rem', color: '#065f46', lineHeight: 1.4 }}>You have full access to all features.</p>
+          </div>
+        )}
       </div>
 
-      {/* RIGHT COLUMN: FEED */}
+      {/* RIGHT COLUMN */}
       <div>
+        {/* Share Post */}
         <div className="card" style={{ marginBottom: '24px', padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px' }}>Share Achievement</h3>
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -136,6 +204,47 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
           </div>
         </div>
 
+        {/* VERIFIED BRANDS JOBS SECTION */}
+        <div className="card" style={{ marginBottom: '24px', padding: '0', overflow:'hidden' }}>
+          <div style={{ padding: '1.2rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc' }}>
+            <Briefcase size={20} color="var(--primary)" />
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Verified Brands Hiring</h3>
+          </div>
+          <div>
+            {(!jobs || jobs.length === 0) && <div style={{padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)'}}>No active jobs found.</div>}
+            {jobs && jobs.map((job) => (
+              <div key={job.id} style={{ padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--dark)', cursor: 'pointer' }} onClick={() => setViewingBrand(job)}>
+                      {job.logo}
+                    </div>
+                    <div>
+                      <span 
+                        onClick={() => setViewingBrand(job)}
+                        style={{ fontWeight: 700, fontSize: '1rem', display: 'block', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--primary)' }}
+                      >
+                        {job.brand}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{job.title}</span>
+                    </div>
+                  </div>
+                  <span style={{ background: '#ecfdf5', color: '#047857', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>{job.budget}</span>
+                </div>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '12px' }}>{job.description}</p>
+                <button 
+                  onClick={() => isPremium ? setSelectedJob(job) : setShowPlansModal(true)}
+                  className="btn-ghost" 
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                >
+                  {isPremium ? 'Apply Now' : <><Lock size={14} style={{marginRight: 6}}/> Apply (Premium)</>}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Feed Stream */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {feedPosts.map((post) => (
             <div key={post.id} className="card" style={{ padding: '0' }}>
@@ -145,24 +254,152 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
                   <h4 style={{ fontWeight: 700, fontSize: '1rem', margin: 0 }}>{post.author}</h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{post.time}</p>
                   <p style={{ marginTop: '12px', fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>{post.content}</p>
-                  {/* Render "Created with" if available */}
-                  {post.templateUsed && (
-                    <div style={{marginTop: 12, padding: '12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#0369a1'}}>
-                      <LayoutTemplate size={16}/> Created using <strong>{post.templateUsed}</strong> template
-                    </div>
-                  )}
+                  {post.templateUsed && <div style={{marginTop: 12, padding: '12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#0369a1'}}><LayoutTemplate size={16}/> Created using <strong>{post.templateUsed}</strong> template</div>}
                 </div>
               </div>
-              <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 1.5rem', display: 'flex', gap: '24px' }}>
-                <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><ThumbsUp size={18} /> {post.likes}</button>
-                <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><MessageCircle size={18} /> {post.comments}</button>
+              
+              {/* Interactions */}
+              <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 1.5rem', display: 'flex', alignItems: 'center', gap: '24px' }}>
+                <button onClick={() => handleLike(post.id)} className="btn-ghost" style={{ border: 'none', padding: 0, color: post.likedByMe ? '#ef4444' : 'var(--text-muted)', display:'flex', gap:6 }}>
+                  <ThumbsUp size={18} fill={post.likedByMe ? "#ef4444" : "none"} /> {post.likes}
+                </button>
+                <div style={{display:'flex', alignItems:'center', gap:6, flex: 1}}>
+                  <MessageCircle size={18} color="var(--text-muted)" />
+                  <span style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>{post.comments}</span>
+                  <input 
+                    placeholder="Comment..." 
+                    className="form-input" 
+                    style={{padding: '6px 12px', fontSize: '0.85rem', marginLeft: '8px', borderRadius: '20px'}}
+                    value={commentInputs[post.id] || ""}
+                    onChange={(e) => setCommentInputs({...commentInputs, [post.id]: e.target.value})}
+                    onKeyDown={(e) => e.key === 'Enter' && submitComment(post.id)}
+                  />
+                </div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ADD PORTFOLIO MODAL */}
+      {/* --- MODALS --- */}
+      
+      {/* 1. VIEW BRAND PROFILE MODAL (Past Hiring) */}
+      {viewingBrand && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: 48, height: 48, background: '#e0f2fe', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: '#0369a1' }}>
+                  {viewingBrand.logo}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>{viewingBrand.brand}</h3>
+                  <div style={{ fontSize: '0.8rem', color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle size={12} /> Verified Brand
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setViewingBrand(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+            </div>
+
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Past Hiring History</h4>
+            
+            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+              {viewingBrand.pastHiring && viewingBrand.pastHiring.length > 0 ? (
+                viewingBrand.pastHiring.map(hire => (
+                  <div key={hire.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{hire.creator}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{hire.campaign}</div>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: '99px' }}>
+                      Verified Hire
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textAlign: 'center' }}>No public hiring history available.</p>
+              )}
+            </div>
+            
+            <button onClick={() => setViewingBrand(null)} className="btn btn-ghost" style={{ width: '100%', marginTop: '20px' }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. APPLY JOB MODAL */}
+      {selectedJob && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
+            <h3 style={{ marginBottom: 16, fontWeight: 800 }}>Apply to {selectedJob.brand}</h3>
+            <p style={{ marginBottom: 20, color: 'var(--text-muted)' }}>Applying for: <strong>{selectedJob.title}</strong></p>
+            
+            <div className="input-group">
+              <label className="input-label">Your Pitch / Note</label>
+              <textarea 
+                className="form-input" 
+                rows="4" 
+                placeholder="Why are you a good fit for this campaign?" 
+                value={appMessage}
+                onChange={(e) => setAppMessage(e.target.value)}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={handleApply} className="btn btn-primary" style={{ flex: 1 }}>Send Application</button>
+              <button onClick={() => setSelectedJob(null)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plans Modal */}
+      {showPlansModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, backdropFilter: 'blur(4px)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '800px', position: 'relative', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <button onClick={() => setShowPlansModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+            <h2 style={{ textAlign: 'center', fontSize: '1.8rem', fontWeight: 900, marginBottom: '32px' }}>Upgrade Your Potential</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+                    <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Pro Creator</h3>
+                    <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 16px' }}>₹499<span style={{fontSize: '1rem', color: '#6b7280'}}>/mo</span></div>
+                    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>{proCreatorFeatures.map((f, i) => <li key={i} style={{display:'flex', gap:8, fontSize:'0.9rem'}}><div style={{width:6, height:6, background:'var(--primary)', borderRadius:'50%', marginTop:8}}/>{f}</li>)}</ul>
+                    <button onClick={() => { onUpgrade(); setShowPlansModal(false); }} className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }}>Choose Pro</button>
+                </div>
+                <div style={{ background: 'var(--dark)', color: 'white', borderRadius: '16px', padding: '24px' }}>
+                    <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Brand Dashboard</h3>
+                    <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 16px' }}>₹4,999<span style={{fontSize: '1rem', color: '#9ca3af'}}>/mo</span></div>
+                    <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>{brandFeatures.map((f, i) => <li key={i} style={{display:'flex', gap:8, fontSize:'0.9rem'}}><div style={{width:6, height:6, background:'var(--primary)', borderRadius:'50%', marginTop:8}}/>{f}</li>)}</ul>
+                    <button onClick={() => { onUpgrade(); setShowPlansModal(false); }} className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }}>Choose Brand</button>
+                </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verify & Password Modals */}
+      {showVerifyModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, backdropFilter: 'blur(4px)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '450px', position: 'relative', padding: '0', overflow: 'hidden' }}>
+            <button onClick={() => setShowVerifyModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', zIndex: 10 }}><X size={24} /></button>
+            <div style={{ padding: '2rem' }}><VerificationTool onClose={() => setShowVerifyModal(false)} /></div>
+          </div>
+        </div>
+      )}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+          <div className="card" style={{ width: '100%', maxWidth: '400px', position: 'relative' }}>
+            <button onClick={() => setShowPasswordModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '1.5rem' }}>Change Password</h3>
+            <form onSubmit={handleChangePassword}>
+              <div className="input-group"><label className="input-label">New Password</label><input className="form-input" type="password" required placeholder="Min 6 chars" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
+              {passMessage.text && <div style={{ marginBottom: '1rem', padding: '0.75rem', borderRadius: '8px', fontSize:'0.9rem', background: passMessage.type === 'error' ? '#fef2f2' : '#ecfdf5', color: passMessage.type === 'error' ? '#ef4444' : '#10b981' }}>{passMessage.text}</div>}
+              <button disabled={changingPass} className="btn btn-primary w-full">{changingPass ? <Loader2 className="animate-spin" /> : 'Update Password'}</button>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Portfolio Modal */}
       {showPortfolioModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
@@ -177,22 +414,476 @@ export default function Dashboard({ userData, setView, feedPosts, addPost }) {
           </div>
         </div>
       )}
-
-      {/* Verify Identity Modal */}
-      {showVerifyModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '450px', position: 'relative', padding: '0', overflow: 'hidden' }}>
-            <button onClick={() => setShowVerifyModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', zIndex: 10 }}><X size={24} /></button>
-            <div style={{ padding: '2rem' }}><VerificationTool onClose={() => setShowVerifyModal(false)} /></div>
-          </div>
-        </div>
-      )}
-
-      {/* Password Modal (Hidden for brevity but logic exists in your file) */}
-      {showPasswordModal && (<div>...</div>)}
     </div>
   );
 }
+// import React, { useState } from 'react';
+// import { updatePassword } from 'firebase/auth';
+// import { auth } from '../config/firebase';
+// import { 
+//   Trophy, Briefcase, Award, Lock, X, Loader2, CheckCircle, Clock, Fingerprint,
+//   Send, Image as ImageIcon, ThumbsUp, MessageCircle, Share2, MoreHorizontal,
+//   Globe, LayoutTemplate, Plus, Trash2, Crown, UserPlus
+// } from 'lucide-react';
+// import VerificationTool from './VerificationTool';
+
+// export default function Dashboard({ userData, setView, feedPosts, addPost, isPremium, onUpgrade }) {
+//   const [showPasswordModal, setShowPasswordModal] = useState(false);
+//   const [showVerifyModal, setShowVerifyModal] = useState(false);
+//   const [showPlansModal, setShowPlansModal] = useState(false);
+//   const [showPortfolioModal, setShowPortfolioModal] = useState(false);
+  
+//   // --- PORTFOLIO STATE ---
+//   const [portfolio, setPortfolio] = useState([
+//     { id: 1, brand: "TechFlow", role: "Lead Reviewer", date: "Aug 2024", campaign: "Summer Gadgets" },
+//     { id: 2, brand: "SoundCore", role: "Influencer", date: "Jun 2024", campaign: "Audio Launch" },
+//   ]);
+  
+//   const [newCollab, setNewCollab] = useState({ brand: "", role: "", date: "" });
+
+//   const handleAddPortfolio = (e) => {
+//     e.preventDefault();
+//     if (!newCollab.brand || !newCollab.role) return;
+//     setPortfolio([{ id: Date.now(), ...newCollab, campaign: "Custom Project" }, ...portfolio]);
+//     setNewCollab({ brand: "", role: "", date: "" });
+//     setShowPortfolioModal(false);
+//   };
+
+//   const handleDeletePortfolio = (id) => {
+//     setPortfolio(portfolio.filter(p => p.id !== id));
+//   };
+
+//   // --- FEED STATE ---
+//   const [postContent, setPostContent] = useState("");
+
+//   const handlePostSubmit = () => {
+//     if (!postContent.trim()) return;
+//     const newPost = {
+//       id: Date.now(),
+//       author: userData.fullName || userData.companyName,
+//       avatar: (userData.fullName || "U")[0],
+//       content: postContent,
+//       time: "Just now",
+//       likes: 0, comments: 0
+//     };
+//     addPost(newPost);
+//     setPostContent("");
+//   };
+
+//   // --- ACTIONS ---
+//   const handleTemplateClick = () => {
+//     if (isPremium) {
+//       setView('templates');
+//     } else {
+//       setShowPlansModal(true);
+//     }
+//   };
+
+//   const handleConnect = (creatorName) => {
+//     if (isPremium) {
+//       alert(`Connection request sent to ${creatorName}!`);
+//     } else {
+//       setShowPlansModal(true);
+//     }
+//   };
+
+//   // --- PASSWORD STATE ---
+//   const [newPassword, setNewPassword] = useState('');
+//   const [passMessage, setPassMessage] = useState({ type: '', text: '' });
+//   const [changingPass, setChangingPass] = useState(false);
+
+//   const handleChangePassword = async (e) => {
+//     e.preventDefault();
+//     setChangingPass(true);
+//     setTimeout(() => { setChangingPass(false); setShowPasswordModal(false); }, 1000);
+//   };
+
+//   // Features Lists
+//   const proCreatorFeatures = ["Live Analytics Dashboard", "Brand Discovery Priority", "AI Premium Templates", "Performance Insights"];
+//   const brandFeatures = ["Unlimited Searches", "Verified Data Export", "Campaign Tracking", "AI Trust Scoring"];
+
+//   if (!userData) return null;
+
+//   return (
+//     <div className="dashboard-grid">
+      
+//       {/* LEFT COLUMN */}
+//       <div className="space-y-6">
+//         <div className="card profile-header">
+//           <div className="avatar">{userData.type === 'creator' ? userData.fullName[0] : userData.companyName[0]}</div>
+//           <h3 style={{ fontWeight: 'bold', fontSize: '1.4rem', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+//             {userData.type === 'creator' ? userData.fullName : userData.companyName}
+//             {userData.verified && <CheckCircle size={22} fill="#10b981" color="white" />}
+//             {isPremium && <Crown size={22} fill="#f59e0b" color="#b45309" />} {/* Premium Badge */}
+//           </h3>
+//           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>{userData.type} Account</p>
+//           <div className="stats-row"><div className="stat-box"><div className="stat-val">1.2k</div><div className="stat-lbl">Rank</div></div><div className="stat-box"><div className="stat-val">89</div><div className="stat-lbl">Trust Score</div></div></div>
+//         </div>
+
+//         {/* PORTFOLIO */}
+//         <div className="card">
+//           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
+//             <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Portfolio</h4>
+//             <button onClick={() => setShowPortfolioModal(true)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Plus size={14}/> Add</button>
+//           </div>
+//           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+//             {portfolio.map((collab) => (
+//               <div key={collab.id} style={{ display: 'flex', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+//                 <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-hover)' }}>{collab.brand[0]}</div>
+//                 <div style={{flex: 1}}>
+//                   <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{collab.brand}</div>
+//                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{collab.role}</div>
+//                 </div>
+//                 <button onClick={() => handleDeletePortfolio(collab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6 }}><Trash2 size={16} /></button>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* ACTIONS */}
+//         <div className="card">
+//           <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px' }}>Actions</h4>
+//           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+//             <button onClick={() => setView('trending')} className="btn w-full" style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fcd34d' }}><Globe size={18} /> Global Trending Rank</button>
+            
+//             {/* TEMPLATE BUTTON (LOCKED IF NOT PREMIUM) */}
+//             <button 
+//               onClick={handleTemplateClick} 
+//               className="btn w-full" 
+//               style={{ background: isPremium ? '#f0f9ff' : '#f1f5f9', color: isPremium ? '#0369a1' : '#64748b', border: isPremium ? '1px solid #bae6fd' : '1px solid #e2e8f0' }}
+//             >
+//               {isPremium ? <LayoutTemplate size={18} /> : <Lock size={18} />} 
+//               {isPremium ? 'Browse Templates' : 'Templates (Locked)'}
+//             </button>
+
+//             <button onClick={() => setShowVerifyModal(true)} className="btn w-full" style={{ background: 'var(--dark)', color: 'white' }}><Fingerprint size={18} /> Verify Identity</button>
+//           </div>
+//         </div>
+
+//         {/* PREMIUM AD (Changes state when upgraded) */}
+//         {!isPremium ? (
+//           <div className="card" style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}>
+//             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 800, marginBottom: '8px' }}><Award size={20} /> Premium Plan</div>
+//             <p style={{ fontSize: '0.9rem', color: '#92400e', lineHeight: 1.4, marginBottom: '16px' }}>Unlock detailed analytics, templates, and direct messaging.</p>
+//             <button onClick={() => setShowPlansModal(true)} className="btn btn-primary" style={{ width: '100%', padding: '0.6rem' }}>Upgrade Plan</button>
+//           </div>
+//         ) : (
+//           <div className="card" style={{ background: '#ecfdf5', border: '1px solid #6ee7b7' }}>
+//             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#047857', fontWeight: 800, marginBottom: '8px' }}><Crown size={20} /> Premium Active</div>
+//             <p style={{ fontSize: '0.9rem', color: '#065f46', lineHeight: 1.4 }}>You have full access to all features.</p>
+//           </div>
+//         )}
+//       </div>
+
+//       {/* RIGHT COLUMN */}
+//       <div>
+//         <div className="card" style={{ marginBottom: '24px', padding: '1.5rem' }}>
+//           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px' }}>Share Achievement</h3>
+//           <div style={{ display: 'flex', gap: '12px' }}>
+//             <div className="avatar" style={{ width: 40, height: 40, fontSize: '1rem', margin: 0 }}>{(userData.fullName || "U")[0]}</div>
+//             <div style={{ flex: 1 }}>
+//               <textarea className="form-input" placeholder="What's your latest milestone?" rows="2" style={{ resize: 'none', marginBottom: '12px', background: '#f9fafb' }} value={postContent} onChange={(e) => setPostContent(e.target.value)} />
+//               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+//                 <div style={{ display: 'flex', gap: '12px' }}><button className="btn-ghost" style={{ padding: '6px 10px' }}><ImageIcon size={18}/></button></div>
+//                 <button onClick={handlePostSubmit} className="btn-primary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.85rem', borderRadius: '8px' }}>Post <Send size={14} style={{ marginLeft: 6 }}/></button>
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* Weekly Leaderboard Snippet with Connect Buttons */}
+//         <div className="card" style={{ marginBottom: '24px', padding: '0' }}>
+//           <div style={{ padding: '1.2rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+//             <Trophy size={20} color="var(--primary)" />
+//             <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Top Creators to Connect</h3>
+//           </div>
+//           <div>
+//             {[1, 2, 3].map((rank) => (
+//               <div key={rank} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+//                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+//                   <span style={{ fontWeight: 900, width: '20px', color: rank === 1 ? '#f59e0b' : '#94a3b8' }}>#{rank}</span>
+//                   <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9' }}></div>
+//                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Creative Soul {rank}</span>
+//                 </div>
+//                 <button 
+//                   onClick={() => handleConnect(`Creative Soul ${rank}`)}
+//                   className="btn-ghost" 
+//                   style={{ padding: '4px 10px', fontSize: '0.75rem', height: 'auto', borderRadius: '6px' }}
+//                 >
+//                   {isPremium ? <UserPlus size={14} /> : <Lock size={14} />}
+//                   {isPremium ? 'Connect' : ''}
+//                 </button>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+
+//         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+//           {feedPosts.map((post) => (
+//             <div key={post.id} className="card" style={{ padding: '0' }}>
+//               <div style={{ padding: '1.5rem', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+//                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--dark)' }}>{post.avatar}</div>
+//                 <div style={{ flex: 1 }}>
+//                   <h4 style={{ fontWeight: 700, fontSize: '1rem', margin: 0 }}>{post.author}</h4>
+//                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{post.time}</p>
+//                   <p style={{ marginTop: '12px', fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>{post.content}</p>
+//                   {post.templateUsed && <div style={{marginTop: 12, padding: '12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#0369a1'}}><LayoutTemplate size={16}/> Created using <strong>{post.templateUsed}</strong> template</div>}
+//                 </div>
+//               </div>
+//               <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 1.5rem', display: 'flex', gap: '24px' }}>
+//                 <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><ThumbsUp size={18} /></button>
+//                 <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><MessageCircle size={18} /></button>
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       </div>
+
+//       {/* PLANS MODAL */}
+//       {showPlansModal && (
+//         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, backdropFilter: 'blur(4px)' }}>
+//           <div className="card" style={{ width: '100%', maxWidth: '800px', position: 'relative', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+//             <button onClick={() => setShowPlansModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+//             <h2 style={{ textAlign: 'center', fontSize: '1.8rem', fontWeight: 900, marginBottom: '32px' }}>Upgrade Your Potential</h2>
+//             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+//                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '24px' }}>
+//                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Pro Creator</h3>
+//                     <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 16px' }}>₹499<span style={{fontSize: '1rem', color: '#6b7280'}}>/mo</span></div>
+//                     <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>{proCreatorFeatures.map((f, i) => <li key={i} style={{display:'flex', gap:8, fontSize:'0.9rem'}}><div style={{width:6, height:6, background:'var(--primary)', borderRadius:'50%', marginTop:8}}/>{f}</li>)}</ul>
+//                     <button onClick={() => { onUpgrade(); setShowPlansModal(false); }} className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }}>Choose Pro</button>
+//                 </div>
+//                 <div style={{ background: 'var(--dark)', color: 'white', borderRadius: '16px', padding: '24px' }}>
+//                     <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Brand Dashboard</h3>
+//                     <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 16px' }}>₹4,999<span style={{fontSize: '1rem', color: '#9ca3af'}}>/mo</span></div>
+//                     <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>{brandFeatures.map((f, i) => <li key={i} style={{display:'flex', gap:8, fontSize:'0.9rem'}}><div style={{width:6, height:6, background:'var(--primary)', borderRadius:'50%', marginTop:8}}/>{f}</li>)}</ul>
+//                     <button onClick={() => { onUpgrade(); setShowPlansModal(false); }} className="btn btn-primary" style={{ width: '100%', marginTop: '24px' }}>Choose Brand</button>
+//                 </div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Verify Identity Modal */}
+//       {showVerifyModal && (
+//         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, backdropFilter: 'blur(4px)' }}>
+//           <div className="card" style={{ width: '100%', maxWidth: '450px', position: 'relative', padding: '0', overflow: 'hidden' }}>
+//             <button onClick={() => setShowVerifyModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', zIndex: 10 }}><X size={24} /></button>
+//             <div style={{ padding: '2rem' }}><VerificationTool onClose={() => setShowVerifyModal(false)} /></div>
+//           </div>
+//         </div>
+//       )}
+
+//       {showPasswordModal && (
+//         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+//           <div className="card" style={{ width: '100%', maxWidth: '400px', position: 'relative' }}>
+//             <button onClick={() => setShowPasswordModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+//             <h3 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '1.5rem' }}>Change Password</h3>
+//             <form onSubmit={handleChangePassword}>
+//               <div className="input-group"><label className="input-label">New Password</label><input className="form-input" type="password" required placeholder="Min 6 chars" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
+//               {passMessage.text && <div style={{ marginBottom: '1rem', padding: '0.75rem', borderRadius: '8px', fontSize:'0.9rem', background: passMessage.type === 'error' ? '#fef2f2' : '#ecfdf5', color: passMessage.type === 'error' ? '#ef4444' : '#10b981' }}>{passMessage.text}</div>}
+//               <button disabled={changingPass} className="btn btn-primary w-full">{changingPass ? <Loader2 className="animate-spin" /> : 'Update Password'}</button>
+//             </form>
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+// import React, { useState } from 'react';
+// import { updatePassword } from 'firebase/auth';
+// import { auth } from '../config/firebase';
+// import { 
+//   Trophy, Briefcase, Award, Lock, X, Loader2, CheckCircle, Clock, Fingerprint,
+//   Send, Image as ImageIcon, ThumbsUp, MessageCircle, Share2, MoreHorizontal,
+//   Globe, LayoutTemplate, Plus, Trash2
+// } from 'lucide-react';
+// import VerificationTool from './VerificationTool';
+
+// export default function Dashboard({ userData, setView, feedPosts, addPost }) {
+//   const [showPasswordModal, setShowPasswordModal] = useState(false);
+//   const [showVerifyModal, setShowVerifyModal] = useState(false);
+//   const [showPortfolioModal, setShowPortfolioModal] = useState(false); // New Modal for Portfolio
+  
+//   // --- PORTFOLIO STATE ---
+//   const [portfolio, setPortfolio] = useState([
+//     { id: 1, brand: "TechFlow", role: "Lead Reviewer", date: "Aug 2024", campaign: "Summer Gadgets" },
+//     { id: 2, brand: "SoundCore", role: "Influencer", date: "Jun 2024", campaign: "Audio Launch" },
+//   ]);
+  
+//   // New Portfolio Item State
+//   const [newCollab, setNewCollab] = useState({ brand: "", role: "", date: "" });
+
+//   // Add Item
+//   const handleAddPortfolio = (e) => {
+//     e.preventDefault();
+//     if (!newCollab.brand || !newCollab.role) return;
+//     setPortfolio([{ id: Date.now(), ...newCollab, campaign: "Custom Project" }, ...portfolio]);
+//     setNewCollab({ brand: "", role: "", date: "" });
+//     setShowPortfolioModal(false);
+//   };
+
+//   // Delete Item
+//   const handleDeletePortfolio = (id) => {
+//     setPortfolio(portfolio.filter(p => p.id !== id));
+//   };
+
+//   // --- FEED STATE ---
+//   const [postContent, setPostContent] = useState("");
+
+//   const handlePostSubmit = () => {
+//     if (!postContent.trim()) return;
+//     const newPost = {
+//       id: Date.now(),
+//       author: userData.fullName || userData.companyName,
+//       avatar: (userData.fullName || "U")[0],
+//       content: postContent,
+//       time: "Just now",
+//       likes: 0, comments: 0
+//     };
+//     addPost(newPost); // Use the function passed from App.jsx
+//     setPostContent("");
+//   };
+
+//   // --- PASSWORD STATE ---
+//   const [newPassword, setNewPassword] = useState('');
+//   const [passMessage, setPassMessage] = useState({ type: '', text: '' });
+//   const [changingPass, setChangingPass] = useState(false);
+
+//   const handleChangePassword = async (e) => {
+//     e.preventDefault();
+//     setChangingPass(true);
+//     // ... existing password logic ...
+//     // (Keeping it brief for the file block, assume logic is same)
+//     setTimeout(() => { setChangingPass(false); setShowPasswordModal(false); }, 1000);
+//   };
+
+//   if (!userData) return null;
+
+//   return (
+//     <div className="dashboard-grid">
+      
+//       {/* LEFT COLUMN */}
+//       <div className="space-y-6">
+//         <div className="card profile-header">
+//           <div className="avatar">{userData.type === 'creator' ? userData.fullName[0] : userData.companyName[0]}</div>
+//           <h3 style={{ fontWeight: 'bold', fontSize: '1.4rem', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+//             {userData.type === 'creator' ? userData.fullName : userData.companyName}
+//             {userData.verified && <CheckCircle size={22} fill="#10b981" color="white" />}
+//           </h3>
+//           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>{userData.type} Account</p>
+//           <div className="stats-row"><div className="stat-box"><div className="stat-val">1.2k</div><div className="stat-lbl">Rank</div></div><div className="stat-box"><div className="stat-val">89</div><div className="stat-lbl">Trust Score</div></div></div>
+//         </div>
+
+//         {/* PORTFOLIO SECTION (Interactive) */}
+//         <div className="card">
+//           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
+//             <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Portfolio</h4>
+//             <button onClick={() => setShowPortfolioModal(true)} className="btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Plus size={14}/> Add</button>
+//           </div>
+//           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+//             {portfolio.length === 0 && <p style={{color:'var(--text-muted)', fontSize:'0.9rem'}}>No projects yet.</p>}
+//             {portfolio.map((collab) => (
+//               <div key={collab.id} style={{ display: 'flex', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+//                 <div style={{ width: 40, height: 40, borderRadius: '8px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-hover)' }}>
+//                   {collab.brand[0]}
+//                 </div>
+//                 <div style={{flex: 1}}>
+//                   <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{collab.brand}</div>
+//                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{collab.role} • {collab.campaign}</div>
+//                   <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{collab.date}</div>
+//                 </div>
+//                 <button onClick={() => handleDeletePortfolio(collab.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6 }}>
+//                   <Trash2 size={16} />
+//                 </button>
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* Actions */}
+//         <div className="card">
+//           <h4 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '16px' }}>Actions</h4>
+//           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+//             <button onClick={() => setView('trending')} className="btn w-full" style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fcd34d' }}><Globe size={18} /> Global Trending Rank</button>
+//             <button onClick={() => setView('templates')} className="btn w-full" style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}><LayoutTemplate size={18} /> Browse Templates</button>
+//             <button onClick={() => setShowVerifyModal(true)} className="btn w-full" style={{ background: 'var(--dark)', color: 'white' }}><Fingerprint size={18} /> Verify Identity</button>
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* RIGHT COLUMN: FEED */}
+//       <div>
+//         <div className="card" style={{ marginBottom: '24px', padding: '1.5rem' }}>
+//           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px' }}>Share Achievement</h3>
+//           <div style={{ display: 'flex', gap: '12px' }}>
+//             <div className="avatar" style={{ width: 40, height: 40, fontSize: '1rem', margin: 0 }}>{(userData.fullName || "U")[0]}</div>
+//             <div style={{ flex: 1 }}>
+//               <textarea className="form-input" placeholder="What's your latest milestone?" rows="2" style={{ resize: 'none', marginBottom: '12px', background: '#f9fafb' }} value={postContent} onChange={(e) => setPostContent(e.target.value)} />
+//               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+//                 <div style={{ display: 'flex', gap: '12px' }}><button className="btn-ghost" style={{ padding: '6px 10px' }}><ImageIcon size={18}/></button></div>
+//                 <button onClick={handlePostSubmit} className="btn-primary" style={{ padding: '0.5rem 1.2rem', fontSize: '0.85rem', borderRadius: '8px' }}>Post <Send size={14} style={{ marginLeft: 6 }}/></button>
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+
+//         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+//           {feedPosts.map((post) => (
+//             <div key={post.id} className="card" style={{ padding: '0' }}>
+//               <div style={{ padding: '1.5rem', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+//                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--dark)' }}>{post.avatar}</div>
+//                 <div style={{ flex: 1 }}>
+//                   <h4 style={{ fontWeight: 700, fontSize: '1rem', margin: 0 }}>{post.author}</h4>
+//                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{post.time}</p>
+//                   <p style={{ marginTop: '12px', fontSize: '0.95rem', lineHeight: 1.5, color: 'var(--text-main)' }}>{post.content}</p>
+//                   {/* Render "Created with" if available */}
+//                   {post.templateUsed && (
+//                     <div style={{marginTop: 12, padding: '12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#0369a1'}}>
+//                       <LayoutTemplate size={16}/> Created using <strong>{post.templateUsed}</strong> template
+//                     </div>
+//                   )}
+//                 </div>
+//               </div>
+//               <div style={{ borderTop: '1px solid #f1f5f9', padding: '12px 1.5rem', display: 'flex', gap: '24px' }}>
+//                 <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><ThumbsUp size={18} /> {post.likes}</button>
+//                 <button className="btn-ghost" style={{ border: 'none', padding: 0 }}><MessageCircle size={18} /> {post.comments}</button>
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       </div>
+
+//       {/* ADD PORTFOLIO MODAL */}
+//       {showPortfolioModal && (
+//         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+//           <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
+//             <h3 style={{ marginBottom: 16, fontWeight: 800 }}>Add Project</h3>
+//             <div className="input-group"><label className="input-label">Brand Name</label><input className="form-input" value={newCollab.brand} onChange={e => setNewCollab({...newCollab, brand: e.target.value})} /></div>
+//             <div className="input-group"><label className="input-label">Role</label><input className="form-input" value={newCollab.role} onChange={e => setNewCollab({...newCollab, role: e.target.value})} /></div>
+//             <div className="input-group"><label className="input-label">Date</label><input className="form-input" value={newCollab.date} onChange={e => setNewCollab({...newCollab, date: e.target.value})} placeholder="e.g. Oct 2024" /></div>
+//             <div style={{ display: 'flex', gap: 12 }}>
+//               <button onClick={handleAddPortfolio} className="btn btn-primary" style={{ flex: 1 }}>Add</button>
+//               <button onClick={() => setShowPortfolioModal(false)} className="btn btn-ghost" style={{ flex: 1 }}>Cancel</button>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Verify Identity Modal */}
+//       {showVerifyModal && (
+//         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, backdropFilter: 'blur(4px)' }}>
+//           <div className="card" style={{ width: '100%', maxWidth: '450px', position: 'relative', padding: '0', overflow: 'hidden' }}>
+//             <button onClick={() => setShowVerifyModal(false)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', zIndex: 10 }}><X size={24} /></button>
+//             <div style={{ padding: '2rem' }}><VerificationTool onClose={() => setShowVerifyModal(false)} /></div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Password Modal (Hidden for brevity but logic exists in your file) */}
+//       {showPasswordModal && (<div>...</div>)}
+//     </div>
+//   );
+// }
 // import React, { useState } from 'react';
 // import { updatePassword } from 'firebase/auth';
 // import { auth } from '../config/firebase';
