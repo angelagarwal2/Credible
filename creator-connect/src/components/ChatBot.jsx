@@ -106,7 +106,7 @@ export default function ChatBot() {
 
           <form className="chat-form" onSubmit={(e) => { e.preventDefault(); handleSend(input); }}>
             <input className="chat-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type your question..." />
-            <button type="submit" className="send-btn"><Send size={18} /></button>
+            <button style={{color:'white'}} type="submit" className="send-btn"><Send size={18} /></button>
           </form>
         </div>
       </div>

@@ -180,7 +180,7 @@ export default function App() {
           Building the professional identity layer for the creator economy.
         </div>
         <div style={{marginTop: '2px', color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem'}}>
-          &copy; 2024 Credible Technologies. All rights reserved.
+          &copy; 2025  Credible Technologies. All rights reserved.
         </div>
       </footer>
     </div>
