@@ -188,7 +188,7 @@ export default function BrandDashboard({ userData, jobs, addJob }) {
                   <p style={{ color: 'var(--text-muted)' }}>{viewingCreator.niche}</p>
                 </div>
               </div>
-              <button onClick={() => setViewingCreator(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+              <button onClick={() => setViewingCreator(null)} style={{ background: 'none',color:'black', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
             </div>
 
             {/* Portfolio Section */}
