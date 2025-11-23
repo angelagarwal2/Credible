@@ -91,7 +91,6 @@ export default function LandingPage({ setView }) {
 
       {/* PROBLEM */}
       <section id="problem">
-        <div className="section-divider"><X size={40} color="var(--primary)" strokeWidth={3} /></div>
         <div style={{textAlign:'center', marginBottom: 40}}>
           <h2 className="section-heading">The Creator Identity Problem</h2>
           <p className="section-sub" style={{margin:'0 auto'}}>Entertainment platforms fail creators by providing no professional identity.</p>
@@ -117,7 +116,6 @@ export default function LandingPage({ setView }) {
 
       {/* SOLUTION */}
       <section id="solution" style={{marginTop: 60}}>
-        <div className="section-divider"><Network size={40} color="var(--primary)" strokeWidth={3} /></div>
         <div style={{textAlign:'center', marginBottom: 40}}>
           <h2 className="section-heading">The Credible Solution</h2>
         </div>
@@ -128,7 +126,6 @@ export default function LandingPage({ setView }) {
 
       {/* PREMIUM TIER BREAKDOWN */}
       <section id="pricing" style={{marginTop: 80}}>
-        <div className="section-divider"><DollarSign size={40} color="var(--primary)" strokeWidth={3} /></div>
         <div style={{textAlign:'center', marginBottom: 60}}>
           <h2 className="section-heading">Premium Tier Breakdown</h2>
           <p className="section-sub" style={{margin:'0 auto'}}>Choose the plan that fits your professional needs.</p>
