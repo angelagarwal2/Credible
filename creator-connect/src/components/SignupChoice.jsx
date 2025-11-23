@@ -3,7 +3,7 @@ import { Video, Briefcase } from 'lucide-react';
 
 export default function SignupChoice({ setView }) {
   return (
-    <div className="text-center">
+    <div className="card text-center">
       <h2 className="mb-6" style={{ fontSize: '1.8rem', color: 'var(--primary)' }}>Join the Network</h2>
       <p className="mb-6" style={{ color: '#666' }}>Select your primary role to get started</p>
       

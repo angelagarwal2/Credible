@@ -37,7 +37,7 @@ export default function Login({ setView }) {
       setMessage('Password reset email sent! Check your inbox.');
       setIsSubmitting(false);
     } catch (err) {
-      setError('Failed to send reset email. Please check the address.');
+      setError('Failed to send reset email.');
       setIsSubmitting(false);
     }
   };
@@ -68,25 +68,17 @@ export default function Login({ setView }) {
             </button>
           </form>
 
-          {/* --- Reorganized Links Section --- */}
           <div className="mt-6">
-            {/* 1. Sign Up Link (Top) */}
             <div className="text-center mb-4">
-              <p style={{ fontSize: '0.9rem', color: '#666', margin: 0, alignItems: 'center' }}>
+              <p style={{ fontSize: '0.9rem', color: '#666', margin: 0 }}>
                 Don't have an account? <button onClick={() => setView('signup-choice')} className="btn-link">Sign Up</button>
               </p>
             </div>
-
-            {/* 2. Forgot Password Link (Bottom) */}
             <div className="text-center" style={{ borderTop: '1px solid #f3f4f6', paddingTop: '1rem' }}>
               <button 
                 onClick={() => { setMode('reset'); setError(''); setMessage(''); }}
                 className="btn-link"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  color: 'var(--text-muted)', 
-                  fontWeight: 'normal',
-                }}
+                style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 'normal' }}
               >
                 Forgot Password?
               </button>
@@ -110,7 +102,7 @@ export default function Login({ setView }) {
               <KeyRound size={24} />
             </div>
             <h2 style={{ fontSize: '1.5rem', color: 'var(--primary)', margin: '0 0 0.5rem 0' }}>Reset Password</h2>
-            <p style={{ color: '#666', fontSize: '0.95rem' }}>Enter your email and we'll send you a link to reset your password.</p>
+            <p style={{ color: '#666', fontSize: '0.95rem' }}>Enter your email and we'll send you a link.</p>
           </div>
 
           <form onSubmit={handleResetPassword}>
